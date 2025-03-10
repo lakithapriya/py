@@ -1,0 +1,79 @@
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import classification_report, ConfusionMatrixDisplay, roc_curve, auc, precision_recall_curve, RocCurveDisplay, PrecisionRecallDisplay
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from imblearn.over_sampling import SMOTE
+lp = pd.read_csv("C:/Users/lakit/Downloads/fraud_detection1/DATASET.CSV")
+lp.head()
+print("Dataframe shape: ", lp.shape)
+print(lp.info())
+print("Null data: ", lp.isna().sum())
+print("Duplicate data: ", lp.duplicated().sum())
+print("Original data features: ", lp.columns.tolist())
+print(lp.corr(numeric_only=True)['TARGET'].sort_values(ascending=False))
+print("Target value counts: ", lp['TARGET'].value_counts())
+lp['TARGET'].value_counts().plot(kind='bar')
+lp['NAME_CONTRACT_TYPE'].value_counts().plot(kind='bar')
+sns.barplot(x=lp['NAME_CONTRACT_TYPE'], y=lp['TARGET'])
+lp['CODE_GENDER'].value_counts().plot(kind='bar')
+sns.scatterplot(lp['AMT_INCOME_TOTAL'])
+print("Total income amount mean", lp['AMT_INCOME_TOTAL'].mean(), "Total credit amount mean: ", lp['AMT_CREDIT'].mean())
+sns.barplot(x = lp['NAME_EDUCATION_TYPE'], y = lp['TARGET'])
+plt.xticks(rotation = 'vertical')
+plt.show()
+lp = lp[['TARGET', 'NAME_CONTRACT_TYPE', 'CODE_GENDER', 'FLAG_OWN_CAR', 'AMT_INCOME_TOTAL', 
+             'AMT_CREDIT', 'AMT_ANNUITY', 'AMT_GOODS_PRICE', 'NAME_EDUCATION_TYPE', 'OCCUPATION_TYPE', 'CNT_FAM_MEMBERS', 
+             'REGION_RATING_CLIENT', 'REG_REGION_NOT_WORK_REGION', 'DAYS_LAST_PHONE_CHANGE']]
+lp.dropna(inplace=True)
+lp.corr(numeric_only = True)
+sns.heatmap(lp.corr(numeric_only = True))
+print(lp.columns.tolist())
+lp.info()
+numerical_features = lp.select_dtypes(include=["int64", "float64"]).columns.difference(["TARGET"])
+categorical_features = lp.select_dtypes(include=["object"]).columns
+print(f"Numerical features in data: {numerical_features}, \nCategorical features in data: {categorical_features}")
+categorical_columns = ['NAME_CONTRACT_TYPE', 'CODE_GENDER', 'FLAG_OWN_CAR', 'NAME_EDUCATION_TYPE', 'OCCUPATION_TYPE'] 
+lp_encoded = pd.get_dummies(lp, columns=categorical_columns, drop_first=True) 
+X = lp_encoded.drop('TARGET', axis=1)
+y = lp_encoded['TARGET']
+smote = SMOTE(random_state=42)  
+X_resampled, y_resampled = smote.fit_resample(X, y)
+X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42, stratify=y_resampled)
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
+models = {"Logistic Regression": LogisticRegression(class_weight='balanced', random_state=42),
+    "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42, class_weight='balanced'),
+    "Decision Tree": DecisionTreeClassifier(max_depth=10, random_state=42, class_weight='balanced'),
+    "KNN": KNeighborsClassifier(n_neighbors=5)}
+for name, model in models.items():     # Train, predict, and visualize for each model
+    print(f"\n{name}\n{'-' * len(name)}")
+    if name in ["Logistic Regression", "Decision Tree", "Random Forest"]:
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        y_prob = model.predict_proba(X_test)[:, 1]
+    else:
+        model.fit(X_train_scaled, y_train)
+        y_pred = model.predict(X_test_scaled)
+        y_prob = model.predict_proba(X_test_scaled)[:, 1]
+print(classification_report(y_test, y_pred))
+ConfusionMatrixDisplay.from_estimator(model, X_test_scaled if name in ["SVM", "KNN"] else X_test, y_test)
+plt.title(f'Confusion Matrix - {name}')
+plt.show()
+fpr, tpr, _ = roc_curve(y_test, y_prob)    # ROC Curve
+roc_auc = auc(fpr, tpr)
+plt.figure()
+plt.plot(fpr, tpr, label=f'ROC Curve (AUC = {roc_auc:.2f})')
+plt.plot([0, 1], [0, 1], 'k--')
+plt.title(f'ROC Curve - {name}')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.legend(loc='lower right')
+plt.show()
